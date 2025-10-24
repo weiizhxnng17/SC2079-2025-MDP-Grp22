@@ -1,0 +1,146 @@
+package com.example.mdp_group22
+
+import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.mdp_group22.bluetooth.presentation.BluetoothViewModel
+import com.example.mdp_group22.bluetooth.presentation.ChatScreen
+import com.example.mdp_group22.ui.theme.ArenaWithTools
+import com.example.mdp_group22.ui.theme.BluetoothScreen
+import com.example.mdp_group22.ui.theme.Bluetooth_v2Theme
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
+class MainActivity : ComponentActivity() {
+
+    private val bluetoothManager by lazy {
+        applicationContext.getSystemService(BluetoothManager::class.java)
+    }
+
+    private val bluetoothAdapter by lazy {
+        bluetoothManager?.adapter
+    }
+
+    private val isBluetoothEnabled: Boolean
+        get() = bluetoothAdapter?.isEnabled == true
+
+    enum class Screen { Home, Bluetooth, Chat }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+
+        val enableBluetoothLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { /* Not needed */ }
+
+        val permissionLauncher = registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { perms ->
+            val canEnableBluetooth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                perms[Manifest.permission.BLUETOOTH_CONNECT] == true
+            } else true
+
+            if (canEnableBluetooth && !isBluetoothEnabled) {
+                enableBluetoothLauncher.launch(
+                    Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                )
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                )
+            )
+        }
+
+        val requestCode = 1;
+        val discoverableIntent: Intent = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
+            putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300)
+        }
+        startActivityForResult(discoverableIntent, requestCode)
+
+        setContent {
+            Bluetooth_v2Theme {
+                val viewModel = hiltViewModel<BluetoothViewModel>()
+                val state by viewModel.state.collectAsState()
+
+                val context = LocalContext.current
+
+                LaunchedEffect(state.errorMessage) {
+                    state.errorMessage?.let { message ->
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    }
+                }
+
+                LaunchedEffect(state.isConnected) {
+                    if (state.isConnected) {
+                        Toast.makeText(context, "You're connected!", Toast.LENGTH_LONG).show()
+                    }
+                }
+                
+
+                var currentScreen by rememberSaveable { mutableStateOf(Screen.Home) }
+                val stateHolder = rememberSaveableStateHolder()
+                var prevConnected by remember { mutableStateOf(state.isConnected) }
+
+                LaunchedEffect(state.isConnected) {
+                    if (prevConnected && !state.isConnected) {
+                        viewModel.clearChat()
+                    }
+                    prevConnected = state.isConnected
+                }
+
+                when (currentScreen) {
+                    Screen.Home -> stateHolder.SaveableStateProvider("home") {
+                        ArenaWithTools(
+                            goBT = { currentScreen = Screen.Bluetooth },
+                            goChat = {
+                                if (!state.isConnected) {
+                                    Toast.makeText(context, "Not Connected", Toast.LENGTH_SHORT).show()
+                                }
+                                currentScreen = Screen.Chat
+                            }
+                        )
+                    }
+                    Screen.Bluetooth -> stateHolder.SaveableStateProvider("bluetooth") {
+                        BluetoothScreen(onBack = { currentScreen = Screen.Home })
+                    }
+                    Screen.Chat -> stateHolder.SaveableStateProvider("chat") {
+                        ChatScreen(
+                            state = state,
+                            onSendMessage = viewModel::sendMessage,
+                            onBack = { currentScreen = Screen.Home },
+                            onClearChat = viewModel::clearChat
+                        )
+                    }
+                }
+            }
+
+        }
+    }
+}
+
+
+
