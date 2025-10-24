@@ -1,0 +1,193 @@
+package com.example.mdp_group22.bluetooth.presentation
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.RadioButtonDefaults.colors
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.mdp_group22.R
+import com.example.mdp_group22.bluetooth.domain.BluetoothDevice
+
+
+object GameBoyColors {
+    val BezelDark = Color(0xFF2B2F23) //button border
+    val BezelSoft = Color(0xFF3A4231) //surface
+    val LcdDark  = Color(0xFF314126) // grid line + obstacle
+    val LcdMid   = Color(0xFFA19B5C) // button + canva
+    //0xFF91964E
+    //0xFFA19B5C
+    val LcdLite  = Color(0xFFA9BE84)
+    val Pixel    = Color(0xFFE5F2C4) //text
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DeviceScreen(
+    state: BluetoothUiState,
+    onStartScan: () -> Unit,
+    onStopScan: () -> Unit,
+    onStartServer: () -> Unit,
+    onDisconnect: () -> Unit,
+    onDeviceClick: (BluetoothDevice) -> Unit,
+    onBack: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
+        TopAppBar(
+            title = {
+                Text(
+                    text = "BLUETOOTH",
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GameBoyColors.Pixel,
+                )
+            },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            },
+            colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                containerColor = GameBoyColors.BezelSoft,
+                titleContentColor = GameBoyColors.Pixel,
+                navigationIconContentColor = GameBoyColors.Pixel
+            )
+        )
+
+        BluetoothDeviceList(
+            pairedDevices = state.pairedDevices,
+            scannedDevices = state.scannedDevices,
+            onClick = onDeviceClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            Button(
+                onClick = onStartScan,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = GameBoyColors.LcdMid,
+                    contentColor = GameBoyColors.BezelDark
+                ),
+                modifier = Modifier.offset(y = (-12).dp)
+            ) {
+                Text("Start Scan")
+            }
+
+            Button(
+                onClick = onStopScan,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = GameBoyColors.LcdMid,
+                    contentColor = GameBoyColors.BezelDark
+                ),
+                modifier = Modifier.offset(y = (-12).dp)
+            ) {
+                Text("Stop Scan")
+            }
+            Button(
+                onClick = onStartServer,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = GameBoyColors.LcdMid,
+                    contentColor = GameBoyColors.BezelDark
+                ),
+                modifier = Modifier.offset(y = (-12).dp)
+            ) {
+                Text("Start Server")
+            }
+
+            Button(
+                onClick = onDisconnect,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = GameBoyColors.LcdMid,
+                    contentColor = GameBoyColors.BezelDark
+                ),
+                modifier = Modifier.offset(y = (-12).dp)
+            ) {
+                Text("Disconnect")
+            }
+
+        }
+    }
+}
+
+@Composable
+fun BluetoothDeviceList(
+    pairedDevices: List<BluetoothDevice>,
+    scannedDevices: List<BluetoothDevice>,
+    onClick: (BluetoothDevice) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier
+    ) {
+        item {
+            Text(
+                text = "Paired Devices",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(16.dp),
+                color = GameBoyColors.Pixel
+            )
+        }
+        items(pairedDevices) { device ->
+            Text(text = device.name ?: "(No name)",
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable{ onClick(device)}
+                .padding(16.dp),
+            color = GameBoyColors.Pixel
+            )
+        }
+        item {
+            Text(
+                text = "Scanned Devices",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(16.dp),
+                color = GameBoyColors.Pixel
+            )
+        }
+        items(scannedDevices) { device ->
+            Text(text = device.name ?: "(No name)",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable{ onClick(device)}
+                    .padding(16.dp),
+                color = GameBoyColors.Pixel
+            )
+        }
+    }
+}
