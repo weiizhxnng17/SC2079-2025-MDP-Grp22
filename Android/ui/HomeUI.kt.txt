@@ -1,0 +1,2088 @@
+package com.example.mdp_group22.ui.theme
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.res.ResourcesCompat
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.mdp_group22.R
+import com.example.mdp_group22.bluetooth.presentation.BluetoothViewModel
+import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
+
+enum class Facing { N, E, S, W }
+data class Robot(val x: Int, val y: Int, val facing: Facing)
+data class Obstacle(val id: Int, val x: Int, val y: Int, val facing: Facing? = null, val label: String, val isTarget: Boolean = false)
+enum class Tool { OBSTACLE, ROBOT }
+
+
+
+val pixelFont = FontFamily(
+    Font(R.font.press_start_2p, FontWeight.Normal)
+)
+
+object GameBoyColors {
+    val BezelDark = Color(0xFF2B2F23) //button border
+    val BezelSoft = Color(0xFF3A4231) //surface
+    val LcdDark  = Color(0xFF314126) // grid line + obstacle
+    val LcdMid   = Color(0xFF4CAF50) // button + canva
+    //0xFF91964E
+    //0xFFA19B5CColor
+    val LcdMid2 = Color(0xFFA19B5C)
+    val LcdLite  = Color(0xFFA9BE84)
+    val Pixel    = Color(0xFFE5F2C4) //text
+}
+
+
+
+private fun robotCellsCenter(x: Int, y: Int): List<Pair<Int, Int>> =
+    listOf(
+        -1 to -1, 0 to -1, 1 to -1,
+        -1 to  0, 0 to  0, 1 to  0,
+        -1 to  1, 0 to  1, 1 to  1
+    ).map { (dx, dy) -> x + dx to y + dy }
+
+fun findLowestAvailableId(obstacles: List<Obstacle>): Int {
+    val usedIds = obstacles.map { it.id }.toSet()
+    var newId = 1
+    while (usedIds.contains(newId)) {
+        newId++
+    }
+    return newId
+}
+
+@Composable
+fun ArenaWithTools(
+    goBT: () -> Unit,
+    goChat: () -> Unit)
+{
+    val cols = 20
+    val rows = 20
+    val obstacles = rememberSaveable(
+        saver = listSaver(
+            save = { list -> list.map { listOf(it.id, it.x, it.y, it.facing?.name, it.label) } },
+            restore = { saved ->
+                mutableStateListOf<Obstacle>().apply {
+                    saved.forEach {
+                        add(
+                            Obstacle(
+                                id = it[0] as Int,
+                                x = it[1] as Int,
+                                y = it[2] as Int,
+                                facing = (it[3] as String?)?.let(Facing::valueOf),
+                                label = it[4] as String
+                            )
+                        )
+                    }
+                }
+            }
+        )
+    ) { mutableStateListOf<Obstacle>() }
+
+    var robot by rememberSaveable(
+        stateSaver = Saver(
+            save = { listOf(it.x, it.y, it.facing.name) },
+            restore = { Robot(it[0] as Int, it[1] as Int, Facing.valueOf(it[2] as String)) }
+        )
+    ) { mutableStateOf(Robot(1, rows - 2, Facing.N)) }
+
+    val path = rememberSaveable(
+        saver = listSaver(
+            save = { lst -> lst.map { listOf(it.first, it.second) } },
+            restore = { saved ->
+                mutableStateListOf<Pair<Int, Int>>().apply {
+                    saved.forEach { add((it[0] as Int) to (it[1] as Int)) }
+                }
+            }
+        )
+    ) {
+        mutableStateListOf<Pair<Int, Int>>().apply {
+            addAll(robotCellsCenter(robot.x, robot.y))
+        }
+    }
+    var tool by rememberSaveable { mutableStateOf(Tool.OBSTACLE) }
+    var status by rememberSaveable { mutableStateOf("Tap grid to place obstacle") }
+    var showObstacleDialog by remember { mutableStateOf(false) }
+    var dialogObstacleIndex by remember { mutableStateOf<Int?>(null) }
+    var tmpFacing by remember { mutableStateOf<Facing?>(null) }
+    var tmpLabel by remember { mutableStateOf("") }
+    var robotStatus by rememberSaveable { mutableStateOf("Ready to start") }
+    var isTimerRunning by rememberSaveable { mutableStateOf(false) }
+    var startTime by rememberSaveable { mutableStateOf(0L) }
+    var elapsedMillis by rememberSaveable { mutableStateOf(0L) }
+
+    LaunchedEffect(isTimerRunning) {
+        if (isTimerRunning) {
+            startTime = System.currentTimeMillis()
+            elapsedMillis = 0L
+            while (isTimerRunning) {
+                elapsedMillis = System.currentTimeMillis() - startTime
+                delay(10L)
+            }
+        } else {
+            elapsedMillis = 0L
+        }
+    }
+
+    fun formatTimer(millis: Long): String {
+        val minutes = (millis / (1000 * 60)).toInt()
+        val seconds = ((millis / 1000) % 60).toInt()
+        val centiseconds = ((millis / 10) % 100).toInt()
+        return String.format("%02d:%02d.%02d", minutes, seconds, centiseconds)
+    }
+
+    val viewModel = hiltViewModel<BluetoothViewModel>()
+    val state by viewModel.state.collectAsState()
+
+    fun resetTraceTo(x: Int, y: Int) {
+        path.clear()
+        path.addAll(robotCellsCenter(x, y))
+    }
+
+    LaunchedEffect(robot.x, robot.y) {
+        for ((cx, cy) in robotCellsCenter(robot.x, robot.y)) {
+            if (cx in 0 until cols && cy in 0 until rows && !path.contains(cx to cy)) {
+                path.add(cx to cy)
+            }
+        }
+    }
+
+// DO NOT TRACE STARTING POSITION OF ROBOT
+//    val path = rememberSaveable(
+//        saver = listSaver(
+//            save = { lst -> lst.map { listOf(it.first, it.second) } },
+//            restore = { saved ->
+//                mutableStateListOf<Pair<Int, Int>>().apply {
+//                    saved.forEach { add((it[0] as Int) to (it[1] as Int)) }
+//                }
+//            }
+//        )
+//    ) { mutableStateListOf<Pair<Int, Int>>() }
+//
+//    var suppressNextTrace by rememberSaveable { mutableStateOf(true) }
+//
+//
+//    fun resetTraceTo(x: Int, y: Int) {
+//        path.clear()
+//        suppressNextTrace = true
+//    }
+//
+//
+//    LaunchedEffect(robot.x, robot.y) {
+//        if (suppressNextTrace) {
+//            suppressNextTrace = false
+//            return@LaunchedEffect
+//        }
+//        val cell = robot.x to robot.y
+//        if (!path.contains(cell)) {
+//            path.add(cell)
+//        }
+//    }
+
+//    LaunchedEffect(commandTick) {
+//        val captured = commandTick
+//        val waitMs = if (lastCommandWasStart) 30_000L else 5_000L
+//        kotlinx.coroutines.delay(waitMs)
+
+//        if (commandTick == captured) {
+//            robotStatus = "Stop"
+//        }
+//    }
+
+    fun isFreeCell(x: Int, y: Int) =
+        x in 0 until cols && y in 0 until rows
+
+    fun canPlaceRobot(x: Int, y: Int): Boolean =
+        x in 1 until (cols - 1) &&
+                y in 1 until (rows - 1) &&
+                robotCellsCenter(x, y).all { (cx, cy) -> isFreeCell(cx, cy) }
+
+    fun isInRobotFootprint(x: Int, y: Int) =
+        robotCellsCenter(robot.x, robot.y).any { it.first == x && it.second == y }
+
+    fun positionRobotFromMessage(msg: String): Boolean {
+        val parts = msg.trim().split(",").map { it.trim() }
+       if (parts.size != 4 || !parts[0].equals("ROBOT", ignoreCase = true)) return false
+
+        val x = parts[1].toIntOrNull()
+        val y = parts[2].toIntOrNull()
+        val facing = when (parts[3].uppercase()) {
+            "N" -> Facing.N; "E" -> Facing.E; "S" -> Facing.S; "W" -> Facing.W
+            else -> null
+        }
+
+        when {
+            x == null || x !in 0 until cols -> { status = "Invalid ROBOT update → Invalid Column: '${parts[1]}'"; return true }
+            y == null || y !in 0 until rows -> { status = "Invalid ROBOT update → Invalid Row: '${parts[2]}'"; return true }
+            facing == null -> { status = "Invalid ROBOT update → Invalid Direction: '${parts[3]}'"; return true }
+            !canPlaceRobot(x, y) -> { status = "Ignored ROBOT update (blocked 3x3) → ($x, $y)"; return true }
+            else -> {
+                robot = robot.copy(x = x, y = y, facing = facing)
+                resetTraceTo(x, y)
+                status = "Robot updated from chat → Col: $x, Row: ${rows - 1 - y}, Facing: $facing"
+                return true
+            }
+        }
+    }
+
+    fun moveRobotFromMessage(msg: String): Boolean {
+        val json = try {
+            org.json.JSONObject(msg)
+        } catch (e: Exception) {
+            return false
+        }
+
+        if (!json.optString("type").equals("PATH", ignoreCase = true)) return false
+
+        val data = json.optJSONObject("data")
+            ?: run { status = "Missing data object"; return true }
+
+        val pathArray = data.optJSONArray("path")
+            ?: run { status = "Missing path array"; return true }
+
+        fun stepTo(x: Int, y: Int, facing: Facing): Boolean {
+            val moved = canPlaceRobot(x, y)
+            if (moved) robot = robot.copy(x = x, y = y, facing = facing)
+            return moved
+        }
+
+        fun recordPathFor(x: Int, logicalY: Int) {
+            val flippedY = rows - 1 - logicalY
+            for ((cx, cy) in robotCellsCenter(x, flippedY)) {
+                if (cx in 0 until cols && cy in 0 until rows) {
+                    val pair = cx to cy
+                    if (path.contains(pair)) {
+                        path.remove(pair)
+                    }
+                    path.add(pair)
+                }
+            }
+        }
+
+        var prevX = robot.x
+        var prevY = rows - 1 - robot.y
+
+        for (i in 0 until pathArray.length()) {
+            val step = pathArray.optJSONArray(i) ?: run { status = "Invalid format in path $i"; return true }
+            if (step.length() < 3) { status = "Invalid format in path $i"; return true }
+
+            val x = step.optInt(0, Int.MIN_VALUE)
+            val y = step.optInt(1, Int.MIN_VALUE)
+            val d = step.optInt(2, Int.MIN_VALUE)
+
+            if (x == Int.MIN_VALUE || y == Int.MIN_VALUE || d == Int.MIN_VALUE) {
+                status = "Invalid values at path $i"; return true
+            }
+
+            if (x !in 0 until cols) { status = "Invalid column at path $i: '$x'"; return true }
+            if (y !in 0 until rows) { status = "Invalid row at path $i: '$y'"; return true }
+
+            val facing = dirIntToFacing(d) ?: run { status = "Invalid direction at path $i: '$d'"; return true }
+
+            val dx = x - prevX
+            val dy = y - prevY
+            val steps = maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy))
+            if (steps > 0) {
+                val stepX = dx.toFloat() / steps
+                val stepY = dy.toFloat() / steps
+                for (s in 0..steps) {
+                    val interX = (prevX + s * stepX).roundToInt()
+                    val interY = (prevY + s * stepY).roundToInt()
+                    recordPathFor(interX, interY)
+                }
+            }
+
+            // Move the robot to the next coordinate
+            val moved = stepTo(x, rows - 1 - y, facing)
+            if (!moved) {
+                status = "Movement blocked at path $i: ($x,$y)"
+                return true
+            }
+
+            // Update previous position
+            prevX = x
+            prevY = y
+        }
+
+        return true
+    }
+
+
+    fun updateObstacleFromMessage(msg: String): Boolean {
+        val json = try {
+            org.json.JSONObject(msg)
+        } catch (e: Exception) {
+            return false
+        }
+
+        if (!json.optString("type").equals("IMAGE_RESULTS", ignoreCase = true)) {
+            return false
+        }
+
+        val data = json.optJSONObject("data")
+            ?: run {
+                status = "Missing data object"
+                return true
+            }
+
+        val imageIdStr = data.optString("image_id", null)
+        val obstacleId = data.optInt("obstacle_id", -1)
+
+        if (imageIdStr == null) {
+            status = "Missing Image ID"
+            return true
+        }
+        if (obstacleId <= 0) {
+            status = "Invalid Obstacle ID"
+            return true
+        }
+
+        val toId = imageIdStr.toIntOrNull()
+        if (toId == null) {
+            status = "Invalid Image ID: '$imageIdStr'"
+            return true
+        }
+
+        val fromIdx = obstacles.indexOfFirst { it.id == obstacleId }
+        if (fromIdx < 0) {
+            status = "No Obstacle with ID $obstacleId"
+            return true
+        }
+
+        // SAME ID: do not change
+        if (obstacleId == toId) {
+            status = "No change: Image ID same as Obstacle ID"
+            return true
+        }
+
+        // If image_id already exists -> error
+        val toExists = obstacles.any { it.id == toId }
+        if (toExists) {
+            status = "Cannot change: Image ID $toId already exists"
+            return true
+        }
+
+        // Update obstacle
+        val ob = obstacles[fromIdx]
+        val newLabel = if (ob.label == ob.id.toString()) toId.toString() else ob.label
+        obstacles[fromIdx] = ob.copy(
+            id = toId,
+            label = newLabel,
+            isTarget = true
+        )
+
+        status = "Changed Obstacle ID $obstacleId → $toId"
+        return true
+    }
+
+
+
+    var processedInboundCount by rememberSaveable { mutableStateOf(0) }
+
+    LaunchedEffect(state.messages.size) {
+        val inbound = state.messages.filter { !it.isFromLocalUser }
+        val newOnes = inbound.drop(processedInboundCount)
+
+        for (m in newOnes) {
+            val msg = m.message
+            if (positionRobotFromMessage(msg)) continue
+            if( moveRobotFromMessage(msg)) continue
+            if (updateObstacleFromMessage(msg)) continue
+        }
+
+        processedInboundCount = inbound.size
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(color = GameBoyColors.BezelSoft),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp, start = 8.dp, end = 8.dp)
+                    .aspectRatio(cols / rows.toFloat())
+            ) {
+                Arena(
+                    cols = cols,
+                    rows = rows,
+                    obstacles = obstacles,
+                    robot = robot,
+                    path = path,
+                    onCellTap = { x, y ->
+                        if (x == robot.x && y == robot.y) {
+                            robot = robot.copy(
+                                facing = when (robot.facing) {
+                                    Facing.N -> Facing.E
+                                    Facing.E -> Facing.S
+                                    Facing.S -> Facing.W
+                                    Facing.W -> Facing.N
+                                }
+                            )
+                            status = "Robot facing: ${robot.facing}"
+                            return@Arena
+                        }
+                        when (tool) {
+                            Tool.OBSTACLE -> {
+                                if (isInRobotFootprint(x, y)) return@Arena
+                                val idx = obstacles.indexOfFirst { it.x == x && it.y == y }
+                                if (idx >= 0) {
+                                    dialogObstacleIndex = idx
+                                    tmpFacing = obstacles[idx].facing
+                                    tmpLabel = obstacles[idx].label
+                                    showObstacleDialog = true
+                                } else {
+                                    val newId = findLowestAvailableId(obstacles)
+                                    val newObs = Obstacle(newId, x, y, null, newId.toString())
+                                    obstacles.add(newObs)
+                                    status =
+                                        "Obstacle: ${newObs.label}, Col: ${newObs.x}, Row: ${rows - 1 - newObs.y}"
+                                }
+                            }
+
+                            Tool.ROBOT -> {
+                                if (canPlaceRobot(x, y)) {
+                                    robot = robot.copy(x = x, y = y)
+                                    resetTraceTo(x, y)
+                                }
+                            }
+                        }
+                    },
+                    onObstacleMoved = { id, x, y ->
+                        if (isInRobotFootprint(x, y)) return@Arena
+                        val i = obstacles.indexOfFirst { it.id == id }
+                        if (i >= 0) obstacles[i] = obstacles[i].copy(x = x, y = y)
+                    },
+                    onObstacleDragEnd = { id, x, y, removed ->
+                        if (!removed && isInRobotFootprint(x, y)) {
+                            status = "Cannot place obstacle on robot"
+                            return@Arena
+                        }
+                        val i = obstacles.indexOfFirst { it.id == id }
+                        if (i >= 0) {
+                            val ob = obstacles[i]
+                            if (removed) {
+                                obstacles.removeAt(i)
+                                status = "Removed Obstacle ${ob.label}"
+                            } else {
+                                obstacles[i] = ob.copy(x = x, y = y)
+                                val rowOut = rows - 1 - y
+                                val msg = "Obstacle: ${ob.label}, Col: $x, Row: $rowOut"
+                                status = msg
+                            }
+                        }
+                    }
+                )
+            }
+
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column (
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = status,
+                            color = GameBoyColors.Pixel,
+                            fontSize = 11.sp,
+                            fontFamily = pixelFont
+                            )
+                        val robotOutboundRow = rows - 1 - robot.y
+                        Text(
+                            text = "Robot: (${robot.x}, $robotOutboundRow); Direction ${robot.facing.name}; $robotStatus",
+                            color = Color.Red,
+                            fontSize = 9.sp,
+                            fontFamily = pixelFont
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        val activeColors = ButtonDefaults.buttonColors(
+                            //containerColor = Color(0xFF03A9F4),
+                            //containerColor = Color(0xFF9F9F9F),
+                            containerColor = GameBoyColors.LcdMid,
+                        )
+                        val obstacleColors =
+                            if (tool == Tool.OBSTACLE) activeColors else ButtonDefaults.buttonColors(
+                                containerColor = GameBoyColors.LcdMid2,
+                                contentColor = GameBoyColors.BezelDark
+                            )
+
+                        val robotColors =
+                            if (tool == Tool.ROBOT) activeColors else ButtonDefaults.buttonColors(
+                                containerColor = GameBoyColors.LcdMid2,
+                                contentColor = GameBoyColors.BezelDark
+                            )
+
+                        Button(
+                            border = BorderStroke(3.5.dp, GameBoyColors.BezelDark),
+                            onClick = {
+                                tool = Tool.OBSTACLE
+                                status = "Tap grid to place obstacle"
+                            },
+                            modifier = Modifier.size(88.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = obstacleColors
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                ObstacleIcon(modifier = Modifier.size(40.dp))
+                                Text(
+                                    "Obstacle",
+                                    fontSize = 5.sp,
+                                    textAlign = TextAlign.Center,
+                                    fontFamily = pixelFont
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
+
+                        Button(
+                            border = BorderStroke(3.5.dp, GameBoyColors.BezelDark),
+                            onClick = {
+                                tool = Tool.ROBOT
+                                status = "Tap grid to place robot"
+                                robotStatus = "Ready to start"
+                            },
+                            modifier = Modifier.size(88.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = robotColors
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.robot),
+                                    contentDescription = "Robot",
+                                    modifier = Modifier.size(44.dp)
+                                )
+                                Text(
+                                    "Robot",
+                                    fontSize = 5.sp,
+                                    textAlign = TextAlign.Center,
+                                    fontFamily = pixelFont
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth(0.4f)
+                            .offset(y = -(40).dp)
+                            .background(GameBoyColors.BezelDark)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min)
+                                .padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "No.",
+                                color = GameBoyColors.Pixel,
+                                fontSize = 8.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                                fontFamily = pixelFont
+                            )
+                            VerticalDivider(
+                                modifier = Modifier.fillMaxHeight(),
+                                thickness = 1.dp,
+                                color = GameBoyColors.Pixel.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                "Col",
+                                color = GameBoyColors.Pixel,
+                                fontSize = 8.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                                fontFamily = pixelFont
+                            )
+                            VerticalDivider(
+                                modifier = Modifier.fillMaxHeight(),
+                                thickness = 1.dp,
+                                color = GameBoyColors.Pixel.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                "Row",
+                                color = GameBoyColors.Pixel,
+                                fontSize = 8.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                                fontFamily = pixelFont
+                            )
+                            VerticalDivider(
+                                modifier = Modifier.fillMaxHeight(),
+                                thickness = 1.dp,
+                                color = GameBoyColors.Pixel.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                "Face",
+                                color = GameBoyColors.Pixel,
+                                fontSize = 8.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                                fontFamily = pixelFont
+                            )
+                            VerticalDivider(
+                                modifier = Modifier.fillMaxHeight(),
+                                thickness = 1.dp,
+                                color = GameBoyColors.Pixel.copy(alpha = 0.5f)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .width(56.dp)
+                                    .height(IntrinsicSize.Min)
+                                    .padding(end = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Remove",
+                                    color = GameBoyColors.Pixel,
+                                    fontSize = 8.sp,
+                                    fontFamily = pixelFont,
+                                    modifier= Modifier.offset(2.dp)
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(thickness = 1.dp, color = GameBoyColors.Pixel)
+
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 230.dp)
+                        ) {
+                            itemsIndexed(obstacles, key = { _, ob -> ob.id }) { _, ob ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(IntrinsicSize.Min)
+                                        .padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.Start,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        ob.label,
+                                        color = GameBoyColors.Pixel,
+                                        fontSize = 8.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                                        fontFamily = pixelFont
+
+                                    )
+                                    VerticalDivider(
+                                        modifier = Modifier.fillMaxHeight(),
+                                        thickness = 1.dp,
+                                        color = GameBoyColors.Pixel.copy(alpha = 0.5f)
+                                    )
+
+                                    Text(
+                                        ob.x.toString(),
+                                        color = GameBoyColors.Pixel,
+                                        fontSize = 8.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                                        fontFamily = pixelFont
+                                    )
+                                    VerticalDivider(
+                                        modifier = Modifier.fillMaxHeight(),
+                                        thickness = 1.dp,
+                                        color = GameBoyColors.Pixel.copy(alpha = 0.5f)
+                                    )
+
+                                    Text(
+                                        (rows - 1 - ob.y).toString(),
+                                        color = GameBoyColors.Pixel,
+                                        fontSize = 8.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                                        fontFamily = pixelFont
+                                    )
+                                    VerticalDivider(
+                                        modifier = Modifier.fillMaxHeight(),
+                                        thickness = 1.dp,
+                                        color = GameBoyColors.Pixel.copy(alpha = 0.5f)
+                                    )
+
+                                    Text(
+                                        ob.facing?.name ?: "None",
+                                        color = GameBoyColors.Pixel,
+                                        fontSize = 8.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                                        fontFamily = pixelFont
+                                    )
+                                    VerticalDivider(
+                                        modifier = Modifier.fillMaxHeight(),
+                                        thickness = 1.dp,
+                                        color = GameBoyColors.Pixel.copy(alpha = 0.5f)
+                                    )
+
+                                    Box(
+                                        modifier = Modifier
+                                            .width(56.dp)
+                                            .height(IntrinsicSize.Min),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                val i = obstacles.indexOfFirst { it.id == ob.id }
+                                                if (i >= 0) {
+                                                    val removed = obstacles[i]
+                                                    obstacles.removeAt(i)
+                                                    status = "Removed Obstacle ${removed.label}"
+                                                }
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            XIcon(Modifier.size(12.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .offset(x = (-12).dp, y = 16.dp)
+                            .padding(start = 40.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        DPad(
+                            forward = {
+                                val (nx, ny) = when (robot.facing) {
+                                    Facing.N -> robot.x to (robot.y - 1)
+                                    Facing.S -> robot.x to (robot.y + 1)
+                                    Facing.W -> (robot.x - 1) to robot.y
+                                    Facing.E -> (robot.x + 1) to robot.y
+                                }
+                                if (canPlaceRobot(nx, ny)) {
+                                    robot = robot.copy(x = nx, y = ny)
+                                }
+                                viewModel.sendMessage(
+                                    "{\n" +
+                                            "  \"type\": \"NAVIGATION\",\n" +
+                                            "  \"data\": {\n" +
+                                            "    \"commands\": [\"FW100\"]\n" +
+                                            "  }\n" +
+                                            "}"
+                                )
+                                robotStatus = "Forward"
+                            },
+                            reverse = {
+                                val (nx, ny) = when (robot.facing) {
+                                    Facing.N -> robot.x to (robot.y + 1)
+                                    Facing.S -> robot.x to (robot.y - 1)
+                                    Facing.W -> (robot.x + 1) to robot.y
+                                    Facing.E -> (robot.x - 1) to robot.y
+                                }
+                                if (canPlaceRobot(nx, ny)) {
+                                    robot = robot.copy(x = nx, y = ny)
+                                }
+                                viewModel.sendMessage(
+                                    "{\n" +
+                                            "  \"type\": \"NAVIGATION\",\n" +
+                                            "  \"data\": {\n" +
+                                            "    \"commands\": [\"BW100\"]\n" +
+                                            "  }\n" +
+                                            "}"
+                                )
+                                robotStatus = "Reverse"
+                            },
+                            strafeLeft = {
+                                val (nx, ny) = when (robot.facing) {
+                                    Facing.N -> (robot.x - 1) to (robot.y - 1)
+                                    Facing.S -> (robot.x + 1) to (robot.y + 1)
+                                    Facing.E -> (robot.x + 1) to (robot.y - 1)
+                                    Facing.W -> (robot.x - 1) to (robot.y + 1)
+                                }
+
+                                if (canPlaceRobot(nx, ny)) {
+                                    val newFacing = when (robot.facing) {
+                                        Facing.N -> Facing.W
+                                        Facing.W -> Facing.S
+                                        Facing.S -> Facing.E
+                                        Facing.E -> Facing.N
+                                    }
+
+                                    robot = robot.copy(x = nx, y = ny, facing = newFacing)
+                                }
+
+                                viewModel.sendMessage(
+                                    "{\n" +
+                                            "  \"type\": \"NAVIGATION\",\n" +
+                                            "  \"data\": {\n" +
+                                            "    \"commands\": [\"FL090\"]\n" +
+                                            "  }\n" +
+                                            "}"
+                                )
+                                robotStatus = "Strafe Left"
+                            },
+                            strafeRight = {
+                                val (nx, ny) = when (robot.facing) {
+                                    Facing.N -> (robot.x + 1) to (robot.y - 1)
+                                    Facing.S -> (robot.x - 1) to (robot.y + 1)
+                                    Facing.E -> (robot.x + 1) to (robot.y + 1)
+                                    Facing.W -> (robot.x - 1) to (robot.y - 1)
+                                }
+
+                                if (canPlaceRobot(nx, ny)) {
+                                    val newFacing = when (robot.facing) {
+                                        Facing.N -> Facing.E
+                                        Facing.E -> Facing.S
+                                        Facing.S -> Facing.W
+                                        Facing.W -> Facing.N
+                                    }
+                                    robot = robot.copy(x = nx, y = ny, facing = newFacing)
+                                }
+                                viewModel.sendMessage(
+                                    "{\n" +
+                                            "  \"type\": \"NAVIGATION\",\n" +
+                                            "  \"data\": {\n" +
+                                            "    \"commands\": [\"FR090\"]\n" +
+                                            "  }\n" +
+                                            "}"
+                                )
+                                robotStatus = "Strafe Right"
+                            },
+                            backLeft = {
+                                val (nx, ny) = when (robot.facing) {
+                                    Facing.N -> (robot.x - 1) to (robot.y + 1)
+                                    Facing.S -> (robot.x + 1) to (robot.y - 1)
+                                    Facing.E -> (robot.x - 1) to (robot.y - 1)
+                                    Facing.W -> (robot.x + 1) to (robot.y + 1)
+                                }
+
+                                if (canPlaceRobot(nx, ny)) {
+                                    val newFacing = when (robot.facing) {
+                                        Facing.N -> Facing.E
+                                        Facing.E -> Facing.S
+                                        Facing.S -> Facing.W
+                                        Facing.W -> Facing.N
+                                    }
+                                    robot = robot.copy(x = nx, y = ny, facing = newFacing)
+                                }
+                                viewModel.sendMessage(
+                                    "{\n" +
+                                            "  \"type\": \"NAVIGATION\",\n" +
+                                            "  \"data\": {\n" +
+                                            "    \"commands\": [\"BL090\"]\n" +
+                                            "  }\n" +
+                                            "}"
+                                )
+                                robotStatus = "Back Left"
+                            },
+                            backRight = {
+                                val (nx, ny) = when (robot.facing) {
+                                    Facing.N -> (robot.x + 1) to (robot.y + 1)
+                                    Facing.S -> (robot.x - 1) to (robot.y - 1)
+                                    Facing.E -> (robot.x - 1) to (robot.y + 1)
+                                    Facing.W -> (robot.x + 1) to (robot.y - 1)
+                                }
+
+                                if (canPlaceRobot(nx, ny)) {
+                                    val newFacing = when (robot.facing) {
+                                        Facing.N -> Facing.W
+                                        Facing.W -> Facing.S
+                                        Facing.S -> Facing.E
+                                        Facing.E -> Facing.N
+                                    }
+                                    robot = robot.copy(x = nx, y = ny, facing = newFacing)
+                                }
+                                viewModel.sendMessage(
+                                    "{\n" +
+                                            "  \"type\": \"NAVIGATION\",\n" +
+                                            "  \"data\": {\n" +
+                                            "    \"commands\": [\"BR090\"]\n" +
+                                            "  }\n" +
+                                            "}"
+                                )
+                                robotStatus = "Back Right"
+                            },
+                            rotateLeft = {
+                                robot = robot.copy(
+                                    facing = when (robot.facing) {
+                                        Facing.N -> Facing.W
+                                        Facing.W -> Facing.S
+                                        Facing.S -> Facing.E
+                                        Facing.E -> Facing.N
+                                    }
+                                )
+//                                viewModel.sendMessage(
+//                                    "{\n" +
+//                                            "  \"image_id\": \"1\",\n" +
+//                                            "  \"obstacle_id\": 11\n" +
+//                                            "}"
+//                                )
+                                robotStatus = "Rotate Left"
+                            },
+                            rotateRight = {
+                                robot = robot.copy(
+                                    facing = when (robot.facing) {
+                                        Facing.N -> Facing.E
+                                        Facing.E -> Facing.S
+                                        Facing.S -> Facing.W
+                                        Facing.W -> Facing.N
+                                    }
+                                )
+//                                viewModel.sendMessage(
+//                                    "{\n" +
+//                                            "  \"type\": \"PATH\",\n" +
+//                                            "  \"data\": {\n" +
+//                                            "    \"path\": [[1, 1, 0], [1, 8, 0], [2,9,2], [12,9,2], [13,10,0], [14,11,2], [13,12,4], [13,3,4]]\n" +
+//                                            "  }\n" +
+//                                            "}"
+//                                )
+                                robotStatus = "Rotate Right"
+                            }
+                        )
+                        Spacer(Modifier.height(20.dp))
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = GameBoyColors.LcdMid2),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(3.5.dp, GameBoyColors.BezelDark),
+                            elevation = CardDefaults.cardElevation(4.dp),
+                            modifier = Modifier.size(height = 50.dp, width = 120.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = "Timer:",
+                                        color = GameBoyColors.BezelDark,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = pixelFont
+                                    )
+                                    Text(
+                                        text = formatTimer(elapsedMillis),
+                                        color = GameBoyColors.BezelDark,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = pixelFont
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(0.2f)
+                            .offset(y = 20.dp),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        val tint = if (state.isConnected) GameBoyColors.Pixel else Color.DarkGray
+
+                        Button(
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = GameBoyColors.LcdMid2
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(3.5.dp, GameBoyColors.BezelDark),
+                            onClick = {
+                                    viewModel.sendMessage(
+                                        "{\n" +
+                                                "  \"type\": \"START_TASK\",\n" +
+                                                "  \"data\": {}\n" + 
+                                                "}"
+                                    )
+
+                                if (state.isConnected) {
+                                    status = "Starting Task 2..."
+                                    robotStatus = "Driving ..."
+                                    isTimerRunning = true
+                                    elapsedMillis = 0L
+                                }
+                                else {
+                                    status = "Not connected"
+                                }
+                            },
+                            modifier = Modifier
+                                .height(36.dp)
+                                .width(130.dp)
+
+
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.start),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    colorFilter = ColorFilter.tint(tint)                                )
+                                Text(
+                                    "Start",
+                                    fontSize = 11.sp,
+                                    fontFamily = pixelFont ,
+                                    modifier = Modifier.offset(x = (4).dp),
+                                    color = GameBoyColors.BezelDark
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+
+                        Button(
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = GameBoyColors.LcdMid2
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(3.5.dp, GameBoyColors.BezelDark),
+                            onClick = {
+                                    try {
+                                        val obsArray = org.json.JSONArray().apply {
+                                            obstacles
+                                                .sortedBy { it.id }
+                                                .forEach { ob ->
+                                                    put(
+                                                        org.json.JSONObject().apply {
+                                                            put("x", ob.x)
+                                                            put("y", toOutboundY(ob.y, rows))
+                                                            put("d", ob.facing?.toDirInt() ?: "None")
+                                                            put("id", ob.id)
+                                                        }
+                                                    )
+                                                }
+                                        }
+
+                                        val dataObject = org.json.JSONObject().apply {
+                                            put("obstacles", obsArray)
+                                            put("retrying", false)
+                                            put("robot_x", robot.x)
+                                            put("robot_y", toOutboundY(robot.y, rows))
+                                            put("robot_dir", robot.facing.toDirInt())
+                                        }
+
+                                        val payload = org.json.JSONObject().apply {
+                                            put("type", "FASTEST_PATH")
+                                            put("data", dataObject)
+                                        }
+                                        viewModel.sendMessage(payload.toString(2))
+                                    } catch (e: Exception) {
+                                        status = "Failed to build/send map: ${e.message}"
+                                    }
+                                if (state.isConnected) {
+                                    status = "Starting Task 1"
+                                    robotStatus = "Looking for target..."
+                                    isTimerRunning = true
+                                    elapsedMillis = 0L
+                                } else {
+                                    status = "Not connected"
+                                }
+                            },
+                            modifier = Modifier
+                                .height(36.dp)
+                                .width(130.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.map),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    colorFilter = ColorFilter.tint(tint)
+                                )
+                                Text(
+                                    "Send Map",
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.offset(x = (18).dp),
+                                    fontFamily = pixelFont,
+                                    color = GameBoyColors.BezelDark
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+
+                        Button(
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = GameBoyColors.LcdMid2
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(3.5.dp, GameBoyColors.BezelDark),
+                            onClick = {
+                                obstacles.clear()
+                                robot = Robot(1, rows - 2, Facing.N)
+                                resetTraceTo(robot.x, robot.y)
+                                status = "Reset arena"
+                                robotStatus = "Ready to start"
+                                isTimerRunning = false
+                                elapsedMillis = 0L
+                            },
+                            modifier = Modifier
+                                .height(36.dp)
+                                .width(130.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.clear),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    colorFilter = ColorFilter.tint(tint)
+                                )
+                                Text(
+                                    "Reset",
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.offset(x = 4.dp),
+                                    fontFamily = pixelFont,
+                                    color = GameBoyColors.BezelDark
+                                    )
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+
+                        Button(
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = GameBoyColors.LcdMid2
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(3.5.dp, GameBoyColors.BezelDark),
+                            onClick = goBT,
+                            modifier = Modifier
+                                .height(36.dp)
+                                .width(130.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (state.isConnected)
+                                    Image(
+                                        painter = painterResource(id = R.drawable.bluetooth_connected),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        colorFilter = ColorFilter.tint(tint)
+                                    )
+                                else
+                                    Image(
+                                        painter = painterResource(id = R.drawable.bluetooth_unconnected),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        colorFilter = ColorFilter.tint(tint)
+                                    )
+                                Text("BT",
+                                    fontSize = 11.sp,
+                                    fontFamily = pixelFont,
+                                    color = GameBoyColors.BezelDark,
+                                    modifier = Modifier.offset((-16).dp))
+                            }
+                        }
+
+                    }
+                }
+
+            }
+        }
+        DraggableChatButton(
+            onClick = goChat,
+            isEnabled = state.isConnected,
+            enabledTint = GameBoyColors.Pixel,
+            disabledTint = Color.DarkGray,
+            modifier = Modifier.matchParentSize()
+        )
+    }
+    if (showObstacleDialog && dialogObstacleIndex != null) {
+        val i = dialogObstacleIndex!!
+        val ob = obstacles.getOrNull(i)
+        if (ob != null) {
+            AlertDialog(
+                onDismissRequest = { showObstacleDialog = false; dialogObstacleIndex = null },
+                title = { Text("Edit Obstacle",
+                    fontFamily = pixelFont,
+                    color = GameBoyColors.Pixel,
+                    fontSize = 12.sp)
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = tmpLabel,
+                            onValueChange = { tmpLabel = it.take(2) },
+                            label = { Text(
+                                    "Image No.",
+                                    fontFamily = pixelFont,
+                                    color = GameBoyColors.Pixel,
+                                    fontSize = 9.sp
+                                )
+                            },
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                fontFamily = pixelFont,
+                                color = GameBoyColors.Pixel,
+                                fontSize = 10.sp
+                            ),
+                            singleLine = true,
+                            modifier = Modifier.width(120.dp)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Image Face",
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = pixelFont,
+                            color = GameBoyColors.Pixel,
+                            fontSize = 10.sp
+                            )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FacingToggle("N", tmpFacing == Facing.N) { tmpFacing = Facing.N }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                FacingToggle("W", tmpFacing == Facing.W) { tmpFacing = Facing.W }
+                                FacingToggle("None", tmpFacing == null) { tmpFacing = null }
+                                FacingToggle("E", tmpFacing == Facing.E) { tmpFacing = Facing.E }
+                            }
+
+                            FacingToggle("S", tmpFacing == Facing.S) { tmpFacing = Facing.S }
+                        }
+                    }
+                },
+                dismissButton = {
+                    Button(
+                        onClick = {
+                            val removed = obstacles.getOrNull(i)
+                            if (removed != null) {
+                                obstacles.removeAt(i)
+                                status = "Removed Obstacle ${removed.label}"
+                            }
+                            showObstacleDialog = false
+                            dialogObstacleIndex = null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFD32F2F),
+                            contentColor = GameBoyColors.Pixel
+                        )
+                    ) { Text(
+                            "Remove",
+                            fontFamily = pixelFont,
+                            fontSize = 10.sp
+                            )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val newId = tmpLabel.toIntOrNull()
+                            val cleanLabel = tmpLabel.ifBlank { ob.label }
+
+                            if (newId == null) {
+                                status = "Invalid ID: '$tmpLabel' is not a valid number"
+                            } else if (newId <= 0) {
+                                status = "Invalid ID: ID must be greater than 0"
+                            } else if (newId != ob.id && obstacles.any { it.id == newId }) {
+                                status = "Cannot change: ID $newId already exists"
+                            } else {
+                                obstacles[i] = ob.copy(
+                                    id = newId,
+                                    facing = tmpFacing,
+                                    label = if (ob.label == ob.id.toString()) newId.toString() else cleanLabel,
+                                    isTarget = ob.isTarget
+                                )
+                                val o = obstacles[i]
+                                val faceStr = o.facing?.name ?: "None"
+                                val msg = "Obstacle: ${o.label}, Col: ${o.x}, Row: ${rows - 1 - o.y}, Face: $faceStr"
+                                //viewModel.sendMessage(msg)
+                                status = msg
+                            }
+
+                            showObstacleDialog = false
+                            dialogObstacleIndex = null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF2E7D32),
+                            contentColor = GameBoyColors.Pixel
+                        )
+                    ) { Text(
+                        "Apply",
+                        fontFamily = pixelFont,
+                        fontSize = 10.sp
+                        )
+                    }
+                }
+            )
+        } else {
+            showObstacleDialog = false; dialogObstacleIndex = null
+        }
+    }
+}
+
+@Composable
+private fun FacingToggle(text: String, selected: Boolean, onClick: () -> Unit) {
+    if (selected) {
+        Button(
+            onClick = onClick,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = GameBoyColors.LcdMid,
+                contentColor = GameBoyColors.Pixel
+            ),
+        ) {
+            Text(
+                text,
+                fontFamily = pixelFont,
+                fontSize = 10.sp,
+            )
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = GameBoyColors.Pixel,
+            ),
+            border = BorderStroke(1.5.dp, Color.Gray)
+        ) {
+            Text(
+                text,
+                fontFamily = pixelFont,
+                fontSize = 10.sp,
+            )
+        }
+    }
+}
+
+@Composable
+fun ToolButton(text: String, selected: Boolean, onClick: () -> Unit) {
+    if (selected) {
+        Button(onClick = onClick) { Text(text) }
+    } else {
+        OutlinedButton(onClick = onClick) { Text(text) }
+    }
+}
+
+@Composable
+fun Arena(
+    cols: Int,
+    rows: Int,
+    obstacles: List<Obstacle>,
+    robot: Robot,
+    path: List<Pair<Int, Int>>,
+    onCellTap: (x: Int, y: Int) -> Unit,
+    onObstacleMoved: (id: Int, x: Int, y: Int) -> Unit,
+    onObstacleDragEnd: (id: Int, x: Int, y: Int, removed: Boolean) -> Unit
+) {
+    val leftLabelMargin = 28.dp
+    val bottomLabelMargin = 28.dp
+    val topMargin = 4.dp
+    val rightMargin = 4.dp
+
+    var overlaySize by remember { mutableStateOf(IntSize.Zero) }
+    var draggingId by remember { mutableStateOf<Int?>(null) }
+    var draggingOutside by remember { mutableStateOf(false) }
+    var lastCellX by remember { mutableStateOf(0) }
+    var lastCellY by remember { mutableStateOf(0) }
+    var hoverCell by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val density = LocalDensity.current
+
+    val context = LocalContext.current
+
+    Box(Modifier.fillMaxSize()) {
+        val robotBitmap = ImageBitmap.imageResource(id = R.drawable.robot)
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val left = with(density) { leftLabelMargin.toPx() }
+            val top = with(density) { topMargin.toPx() }
+            val right = size.width - with(density) { rightMargin.toPx() }
+            val bottom = size.height - with(density) { bottomLabelMargin.toPx() }
+            val arenaW = right - left
+            val arenaH = bottom - top
+            val gridDark = GameBoyColors.LcdDark.copy(alpha = 0.85f)
+            drawRect(color = GameBoyColors.LcdMid2, topLeft = Offset(left, top), size = Size(arenaW, arenaH))
+            drawRect(color = gridDark, topLeft = Offset(left, top), size = Size(arenaW, arenaH), style = Stroke(width = 5f))
+            val cellW = arenaW / cols
+            val cellH = arenaH / rows
+            val gridColor = Color(0xFF333333)
+            val gridLite = GameBoyColors.LcdLite.copy(alpha = 0.25f)
+            for (c in 1 until cols) {
+                val x = left + c * cellW
+                drawLine(gridDark, Offset(x, top), Offset(x, bottom), strokeWidth = 2.5f)
+            }
+            for (r in 1 until rows) {
+                val y = top + r * cellH
+                drawLine(gridDark, Offset(left, y), Offset(right, y), strokeWidth = 2.5f)
+            }
+
+            val cellLastVisit = mutableMapOf<Pair<Int, Int>, Int>()
+            path.forEachIndexed { index, cell ->
+                cellLastVisit[cell] = index
+            }
+
+            cellLastVisit.forEach { (cell, lastIndex) ->
+                val (vx, vy) = cell
+                val cellLeft = left + vx * cellW
+                val cellTop = top + vy * cellH
+
+                val t = if (path.size > 1) lastIndex.toFloat() / (path.size - 1) else 1f
+
+                val alpha = 0.3f + (0.9f - 0.3f) * t
+
+                val color = Color.Gray.copy(alpha = alpha)
+
+                drawRect(
+                    color = color,
+                    topLeft = Offset(cellLeft, cellTop),
+                    size = Size(cellW, cellH)
+                )
+            }
+
+            hoverCell?.let { (hx, hy) ->
+//              val fill   = Color(0x334CAF50)
+//              val stroke = Color(0xFF4CAF50)
+                val fill   = Color(0x48FF0000)
+                val stroke = Color(0xFFFF0000)
+                // Row arm
+                for (i in 0 until hx) {
+                    val x = left + i * cellW
+                    val y = top  + hy * cellH
+                    val sz = Size(cellW, cellH)
+                    drawRect(fill,   topLeft = Offset(x, y), size = sz)
+                    drawRect(stroke, topLeft = Offset(x, y), size = sz, style = Stroke(width = 3.2f))
+                }
+
+                // Column arm
+                for (j in (hy + 1) until rows) {
+                    val x = left + hx * cellW
+                    val y = top  + j  * cellH
+                    val sz = Size(cellW, cellH)
+                    drawRect(fill,   topLeft = Offset(x, y), size = sz)
+                    drawRect(stroke, topLeft = Offset(x, y), size = sz, style = Stroke(width = 3.2f))
+                }
+            }
+
+            val paint = android.graphics.Paint().apply {
+                isAntiAlias = true
+                textSize = 14f
+            }
+            paint.textAlign = android.graphics.Paint.Align.RIGHT
+            paint.color = GameBoyColors.Pixel.toArgb()
+            paint.typeface = ResourcesCompat.getFont(context, R.font.press_start_2p)
+
+            val yLabelX = left - 8f
+            for (j in 0 until rows) {
+                val ly = top + (j + 0.5f) * cellH
+                val label = (rows - 1 - j).toString()
+                drawContext.canvas.nativeCanvas.drawText(label, yLabelX, ly + 8f, paint)
+            }
+            paint.textAlign = android.graphics.Paint.Align.CENTER
+            paint.color = GameBoyColors.Pixel.toArgb()
+            paint.typeface = ResourcesCompat.getFont(context, R.font.press_start_2p)
+            val xLabelY = bottom + paint.textSize + 8f
+            for (i in 0 until cols) {
+                val lx = left + (i + 0.5f) * cellW
+                drawContext.canvas.nativeCanvas.drawText(i.toString(), lx, xLabelY, paint)
+            }
+            obstacles.forEach { ob ->
+                val cellLeft = left + ob.x * cellW
+                val cellTop = top + ob.y * cellH
+                val obstacleFill = GameBoyColors.LcdDark.copy(alpha = 0.9f)
+                drawRect(color = obstacleFill, topLeft = Offset(cellLeft, cellTop), size = Size(cellW, cellH))
+                val front = Color(0xFFFFEB3B)
+                val sw = 7f
+
+                when (ob.facing) {
+                    Facing.N -> {
+                        drawRect(front, topLeft = Offset(cellLeft, cellTop),
+                            size = Size(cellW, sw))
+                    }
+                    Facing.S -> {
+                        drawRect(front, topLeft = Offset(cellLeft, cellTop + cellH - sw),
+                            size = Size(cellW, sw))
+                    }
+                    Facing.W -> {
+                        drawRect(front, topLeft = Offset(cellLeft, cellTop),
+                            size = Size(sw, cellH))
+                    }
+                    Facing.E -> {
+                        drawRect(front, topLeft = Offset(cellLeft + cellW - sw, cellTop),
+                            size = Size(sw, cellH))
+                    }
+                    null -> {}
+                }
+                val obstacleFace = GameBoyColors.Pixel.copy(alpha = 0.95f)
+                val labelPaint = android.graphics.Paint().apply {
+                    color = obstacleFace.toArgb()
+                    isAntiAlias = true
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    textSize = minOf(cellW, cellH) * if (ob.isTarget) 0.40f else 0.30f
+                    isFakeBoldText = ob.isTarget
+                    typeface = ResourcesCompat.getFont(context, R.font.press_start_2p)
+
+                }
+                val fm = labelPaint.fontMetrics
+                val textX = cellLeft + cellW / 2f
+                val textY = cellTop + cellH / 2f - (fm.ascent + fm.descent) / 2f
+                drawContext.canvas.nativeCanvas.drawText(ob.label, textX, textY, labelPaint)
+            }
+
+            val scale = 0.95f
+            val w = cellW * 3f * scale
+            val h = cellH * 3f * scale
+
+            val baseX = left + (robot.x - 1) * cellW + ((3f * cellW) - w) / 2f
+            val baseY = top  + (robot.y - 1) * cellH + ((3f * cellH) - h) / 2f
+
+            val pivot = Offset(baseX + w / 2f, baseY + h / 2f)
+            val deg = when (robot.facing) { Facing.N -> 0f; Facing.E -> 90f; Facing.S -> 180f; Facing.W -> 270f }
+
+            rotate(degrees = deg, pivot = pivot) {
+                drawImage(
+                    image = robotBitmap,
+                    srcOffset = IntOffset.Zero,
+                    srcSize = IntSize(robotBitmap.width, robotBitmap.height),
+                    dstOffset = IntOffset(baseX.toInt(), baseY.toInt()),
+                    dstSize   = IntSize(w.toInt(), h.toInt())
+                )
+            }
+
+            if (draggingId != null) {
+                hoverCell?.let { (hx, hy) ->
+                    val hudPaint = android.graphics.Paint().apply {
+                        color = GameBoyColors.Pixel.toArgb()
+                        //android.graphics.Color.WHITE
+                        isAntiAlias = true
+                        textSize = 15f
+                        textAlign = android.graphics.Paint.Align.CENTER
+                        typeface = ResourcesCompat.getFont(context, R.font.press_start_2p)
+                        setShadowLayer(8f, 0f, 0f, 0x99000000.toInt())
+                    }
+
+                    val rowOut = rows - 1 - hy
+                    val hudText = "Col: $hx | Row: $rowOut"
+
+                    val textW = hudPaint.measureText(hudText)
+                    val fm = hudPaint.fontMetrics
+                    val textH = fm.bottom - fm.top
+
+                    val hPad = with(density) { 6.dp.toPx() }
+                    val vPad = with(density) { 4.dp.toPx() }
+                    val bubbleW = textW + 2 * hPad
+                    val bubbleH = textH + 2 * vPad
+                    val gap = with(density) { 4.dp.toPx() }
+
+                    val cellCx = left + (hx + 0.5f) * cellW
+                    val cellTopY = top + hy * cellH
+                    val cellBottomY = cellTopY + cellH
+
+                    var bubbleCx = cellCx
+                    val oneCellAboveTop = cellTopY - cellH
+                    var bubbleTop = oneCellAboveTop - bubbleH - gap
+
+                    val minCx = left + bubbleW / 2f + with(density) { 2.dp.toPx() }
+                    val maxCx = right - bubbleW / 2f - with(density) { 2.dp.toPx() }
+                    bubbleCx = bubbleCx.coerceIn(minCx, maxCx)
+
+                    if (bubbleTop < top + with(density) { 2.dp.toPx() }) {
+                        bubbleTop = cellBottomY + cellH + gap
+                    }
+
+                    val bubbleLeft = bubbleCx - bubbleW / 2f
+                    val bubbleRadius = with(density) { 6.dp.toPx() }
+                    drawRoundRect(
+                        color = GameBoyColors.LcdDark,
+                        //Color(0xCC000000)
+                        topLeft = Offset(bubbleLeft, bubbleTop),
+                        size = Size(bubbleW, bubbleH),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(bubbleRadius, bubbleRadius)
+                    )
+
+                    val textBaseline = bubbleTop + (bubbleH / 2f) - ((fm.ascent + fm.descent) / 2f)
+                    drawContext.canvas.nativeCanvas.drawText(hudText, bubbleCx, textBaseline, hudPaint)
+                }
+            }
+        }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(start = leftLabelMargin, top = topMargin, end = rightMargin, bottom = bottomLabelMargin)
+                .onSizeChanged { overlaySize = it }
+                .pointerInput(cols, rows, obstacles) {
+                    detectDragGestures(
+                        onDragStart = { start ->
+                            val left = 0f
+                            val top = 0f
+                            val right = overlaySize.width.toFloat()
+                            val bottom = overlaySize.height.toFloat()
+                            val cellW = (right - left) / cols
+                            val cellH = (bottom - top) / rows
+                            val cx = ((start.x - left) / cellW).toInt()
+                            val cy = ((start.y - top) / cellH).toInt()
+
+                            if (cx in 0 until cols && cy in 0 until rows) {
+                                val idx = obstacles.indexOfFirst { it.x == cx && it.y == cy }
+                                draggingId = if (idx >= 0) obstacles[idx].id else null
+                                if (draggingId != null) {
+                                    lastCellX = cx
+                                    lastCellY = cy
+                                    hoverCell = cx to cy
+                                } else {
+                                    hoverCell = null
+                                }
+                            } else {
+                                draggingId = null
+                                hoverCell = null
+                            }
+                            draggingOutside = false
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            val id = draggingId ?: return@detectDragGestures
+
+                            val left = 0f
+                            val top = 0f
+                            val right = overlaySize.width.toFloat()
+                            val bottom = overlaySize.height.toFloat()
+                            val cellW = (right - left) / cols
+                            val cellH = (bottom - top) / rows
+                            val cx = ((change.position.x - left) / cellW).toInt()
+                            val cy = ((change.position.y - top) / cellH).toInt()
+                            val inside = cx in 0 until cols && cy in 0 until rows
+                            draggingOutside = !inside
+
+                            hoverCell = if (inside) cx to cy else null
+
+                            if (inside && (cx != lastCellX || cy != lastCellY)) {
+                                lastCellX = cx
+                                lastCellY = cy
+                                onObstacleMoved(id, cx, cy)
+                            }
+                        },
+                        onDragEnd = {
+                            val id = draggingId
+                            if (id != null) onObstacleDragEnd(id, lastCellX, lastCellY, draggingOutside)
+                            draggingId = null
+                            draggingOutside = false
+                            hoverCell = null
+                        },
+                        onDragCancel = {
+                            draggingId = null
+                            draggingOutside = false
+                            hoverCell = null
+                        }
+                    )
+                }
+                .pointerInput(cols, rows) {
+                    detectTapGestures { pos ->
+                        val left = 0f
+                        val top = 0f
+                        val right = overlaySize.width.toFloat()
+                        val bottom = overlaySize.height.toFloat()
+                        val cellW = (right - left) / cols
+                        val cellH = (bottom - top) / rows
+                        val cx = ((pos.x - left) / cellW).toInt()
+                        val cy = ((pos.y - top) / cellH).toInt()
+                        if (cx in 0 until cols && cy in 0 until rows) onCellTap(cx, cy)
+                    }
+                }
+        ) {
+            repeat(rows) { r ->
+                Row(Modifier.weight(1f)) {
+                    repeat(cols) {
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun XIcon(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val sw = size.minDimension * 0.15f
+        drawLine(GameBoyColors.Pixel, Offset(0f, 0f), Offset(size.width, size.height), strokeWidth = sw)
+        drawLine(GameBoyColors.Pixel, Offset(size.width, 0f), Offset(0f, size.height), strokeWidth = sw)
+    }
+}
+
+@Composable
+private fun ObstacleIcon(modifier: Modifier = Modifier) {
+    Box(modifier = modifier) {
+        Canvas(Modifier.matchParentSize()) {
+            drawRect(color = GameBoyColors.LcdDark)
+        }
+        Text(
+            "1",
+            color = GameBoyColors.Pixel,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.align(Alignment.Center),
+            fontFamily = pixelFont,
+
+        )
+    }
+}
+
+@Composable
+fun DPad(
+    forward: () -> Unit,
+    reverse: () -> Unit,
+    strafeLeft: () -> Unit,
+    strafeRight: () -> Unit,
+    backLeft: () -> Unit,
+    backRight: () -> Unit,
+    rotateLeft: () -> Unit,
+    rotateRight: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(175.dp)
+
+    ) {
+        Image(
+            painter = painterResource(R.drawable.cross),
+            contentDescription = "DPad Background",
+            contentScale = ContentScale.FillBounds,
+            modifier = Modifier.offset(y = (-5).dp),
+            colorFilter = ColorFilter.tint(GameBoyColors.BezelDark))
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = strafeLeft,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .offset(x = 5.dp, y = 10.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.arrow),
+                        contentDescription = "Strafe Left Icon",
+                        modifier = Modifier.rotate(45f),
+                        tint = Color.Gray
+                    )
+                }
+                IconButton(
+                    onClick = forward,
+                    modifier = Modifier
+                        .size(55.dp)
+                        .offset(y = 20.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.dpad),
+                        contentDescription = "Forward Icon",
+                        modifier = Modifier.rotate(90f),
+                        tint = Color.Gray
+                    )
+                }
+                IconButton(
+                    onClick = strafeRight,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .offset(x = (-5).dp, y = 10.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.arrow),
+                        contentDescription = "Strafe Right Icon",
+                        modifier = Modifier.rotate(135f),
+                        tint = Color.Gray
+                    )
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = rotateLeft,
+                    modifier = Modifier.size(55.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.dpad),
+                        contentDescription = "Rotate Left Icon",
+                        tint = Color.Gray
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                    onClick = rotateRight,
+                    modifier = Modifier.size(55.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.dpad),
+                        contentDescription = "Rotate Right Icon",
+                        modifier = Modifier.rotate(180f),
+                        tint = Color.Gray
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = backLeft,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .offset(x = 5.dp, y = (-10).dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.arrow),
+                        contentDescription = "Back Left Icon",
+                        modifier = Modifier.rotate(315f),
+                        tint = Color.Gray
+                    )
+                }
+                IconButton(
+                    onClick = reverse,
+                    modifier = Modifier
+                        .offset(y = (-20).dp)
+                        .size(55.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.dpad),
+                        contentDescription = "Reverse Icon",
+                        modifier = Modifier.rotate(270f),
+                        tint = Color.Gray
+                    )
+                }
+                IconButton(
+                    onClick = backRight,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .offset(x = (-5).dp, y = (-10).dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.arrow),
+                        contentDescription = "Back Right Icon",
+                        modifier = Modifier.rotate(225f),
+                        tint = Color.Gray
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DraggableChatButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabledTint: Color = Color(0xFF03A9F4),
+    disabledTint: Color = Color.DarkGray,
+    isEnabled: Boolean = true
+) {
+    val density = LocalDensity.current
+
+    var parentSize by remember { mutableStateOf(IntSize.Zero) }
+    var buttonSize by remember { mutableStateOf(IntSize.Zero) }
+
+    val saver = Saver(
+        save = { it: IntOffset -> listOf(it.x, it.y) },
+        restore = { list -> IntOffset(list[0] as Int, list[1] as Int) }
+    )
+    var offsetPx by rememberSaveable(stateSaver = saver) { mutableStateOf(IntOffset.Zero) }
+
+    var isDragging by remember { mutableStateOf(false) }
+    var dragDistance by remember { mutableStateOf(0f) }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .onSizeChanged { parentSize = it }
+    ) {
+        LaunchedEffect(parentSize, buttonSize) {
+            if (parentSize != IntSize.Zero && buttonSize != IntSize.Zero && offsetPx == IntOffset.Zero) {
+                val pad = with(density) { 24.dp.toPx().toInt() }
+                offsetPx = IntOffset(
+                    x = parentSize.width - buttonSize.width - pad,
+                    y = parentSize.height - buttonSize.height - pad
+                )
+            }
+        }
+
+        val tint = if (isEnabled) enabledTint else disabledTint
+
+        Box(
+            modifier = Modifier
+                .offset { offsetPx }
+                .onSizeChanged { buttonSize = it }
+                .pointerInput(parentSize, buttonSize) {
+                    detectDragGestures(
+                        onDragStart = {
+                            isDragging = false
+                            dragDistance = 0f
+                        },
+                        onDrag = { change, drag ->
+                            change.consume()
+                            isDragging = true
+                            dragDistance += drag.getDistance()
+
+                            val newX = (offsetPx.x + drag.x).toInt()
+                            val newY = (offsetPx.y + drag.y).toInt()
+
+                            val maxX = (parentSize.width - buttonSize.width).coerceAtLeast(0)
+                            val maxY = (parentSize.height - buttonSize.height).coerceAtLeast(0)
+                            offsetPx = IntOffset(
+                                x = newX.coerceIn(0, maxX),
+                                y = newY.coerceIn(0, maxY)
+                            )
+                        },
+                        onDragEnd = {
+                            val clickThreshold = with(density) { 6.dp.toPx() }
+                            if (dragDistance < clickThreshold) onClick()
+                            isDragging = false
+                            dragDistance = 0f
+                        },
+                        onDragCancel = {
+                            isDragging = false
+                            dragDistance = 0f
+                        }
+                    )
+                }
+        ) {
+
+            IconButton(
+                onClick = { if (!isDragging) onClick() },
+                modifier = Modifier
+                    .size(56.dp)
+                    .background(Color(0xFF202020), shape = androidx.compose.foundation.shape.CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.15f), androidx.compose.foundation.shape.CircleShape)
+                    .padding(4.dp)
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.chat),
+                    contentDescription = "Open Chat",
+                    tint = tint,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
+    }
+}
+
+private data class Quad(val hx: Float, val hy: Float, val ax: Float, val ay: Float)
+
+// For sending
+private fun Facing.toDirInt(): Int = when (this) {
+    Facing.N -> 0
+    Facing.E -> 2
+    Facing.S -> 4
+    Facing.W -> 6
+}
+
+// For receiving
+private fun dirIntToFacing(dir: Int?): Facing? = when (dir) {
+    0 -> Facing.N
+    2 -> Facing.E
+    4 -> Facing.S
+    6 -> Facing.W
+    else -> null
+}
+
+private fun toOutboundY(internalY: Int, rows: Int) = rows - 1 - internalY
