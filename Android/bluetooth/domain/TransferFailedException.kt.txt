@@ -1,0 +1,5 @@
+package com.example.mdp_group22.bluetooth.domain
+
+import java.io.IOException
+
+class TransferFailedException: IOException("Reading incoming data failed ")

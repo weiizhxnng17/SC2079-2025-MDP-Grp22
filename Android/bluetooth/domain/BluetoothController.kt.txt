@@ -1,0 +1,30 @@
+package com.example.mdp_group22.bluetooth.domain
+
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+
+//This interface defines what are the functions of Bluetooth works
+
+interface BluetoothController {
+
+    val isConnected: StateFlow<Boolean>
+
+    //StateFlow means state that can change over time
+    val scannedDevices: StateFlow<List<BluetoothDeviceDomain>>
+    val pairedDevices: StateFlow<List<BluetoothDeviceDomain>>
+    val errors: SharedFlow<String>
+
+    fun startDiscovery()
+    fun stopDiscovery()
+
+    fun startBluetoothServer(): Flow<ConnectionResult>
+
+    fun connectToDevice(device: BluetoothDevice): Flow<ConnectionResult>
+
+    suspend fun trySendMessage(message: String): BluetoothMessage?
+
+    fun closeConnection()
+
+    fun release()
+}

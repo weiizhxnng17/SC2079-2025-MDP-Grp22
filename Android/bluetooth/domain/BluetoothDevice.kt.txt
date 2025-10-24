@@ -1,0 +1,11 @@
+package com.example.mdp_group22.bluetooth.domain
+
+//This class define personal BluetoothDevice definition.
+
+//typealias is used since there is also another BluetoothDevice in Android Package
+typealias BluetoothDeviceDomain = BluetoothDevice
+
+data class BluetoothDevice(
+    val name: String?,
+    val address: String
+)
