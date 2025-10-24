@@ -1,0 +1,15 @@
+package com.example.mdp_group22.bluetooth.data
+
+//This is to map android bluetooth device returned when calling
+//BluetoothAdapter?.bondedDevices to our own bluetooth device
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothDevice
+import com.example.mdp_group22.bluetooth.domain.BluetoothDeviceDomain
+
+@SuppressLint("MissingPermission")
+fun BluetoothDevice.toBluetoothDeviceDomain(): BluetoothDeviceDomain {
+    return BluetoothDeviceDomain(
+        name = name,
+        address = address
+    )
+}

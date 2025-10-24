@@ -1,0 +1,17 @@
+package com.example.mdp_group22.bluetooth.data
+
+import com.example.mdp_group22.bluetooth.domain.BluetoothMessage
+
+fun String.toBluetoothMessage(isFromLocalUser: Boolean): BluetoothMessage{
+//    val name = substringBeforeLast("#")
+//    val message = substringAfter("#")
+    return BluetoothMessage(
+        message = this,
+        senderName = "",
+        isFromLocalUser = isFromLocalUser
+    )
+}
+
+fun BluetoothMessage.toByteArray(): ByteArray {
+    return message.encodeToByteArray()
+}
