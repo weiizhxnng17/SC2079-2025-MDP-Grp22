@@ -1,0 +1,36 @@
+names:
+- '1'
+- '2'
+- '3'
+- '4'
+- '5'
+- '6'
+- '7'
+- '8'
+- '9'
+- a
+- b
+- c
+- circle
+- d
+- down
+- e
+- f
+- g
+- h
+- left
+- right
+- s
+- t
+- target
+- u
+- up
+- v
+- w
+- x
+- y
+- z
+nc: 31
+
+train: ../data/train/images
+val: ../data/valid/images
