@@ -18,7 +18,7 @@ Start the server by
 python main.py
 ```
 
-The server will be running at `localhost:5000`
+The server will be running at `localhost:5050`
 
 
 ### Primers - Constants and Parameters 
