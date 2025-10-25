@@ -49,66 +49,63 @@ Sample JSON request body:
 
 ```bash
 {
-    "obstacles":
-    [
-        {
-            "x": 0,
-            "y": 9,
-            "id": 1,
-            "d": 2
-        },
-        ...,
-        {
-            "x": 19,
-            "y": 14,
-            "id": 5,
-            "d": 6
-        }
-    ]
+  "obstacles": [
+    {
+      "x": 5,
+      "y": 10,
+      "d": 0,
+      "id": 1
+    },
+    {
+      "x": 15,
+      "y": 5,
+      "d": 2,
+      "id": 2
+    },
+    {
+      "x": 8,
+      "y": 15,
+      "d": 4,
+      "id": 3
+    }
+  ],
+  "retrying": false,
+  "robot_x": 1,
+  "robot_y": 1,
+  "robot_dir": 0
 }
 ```
 
 Sample JSON response:
 
-```{
-    "data": {
-        "commands": [
-            "FR00",
-            "FW10",
-            "SNAP1",
-            "FR00",
-            "BW50",
-            "FL00",
-            "FW60",
-            "SNAP2",
-            ...,
-            "FIN"
-        ],
-        "distance": 46.0,
-        "path": [
-            {
-                "d": 0,
-                "s": -1,
-                "x": 1,
-                "y": 1
-            },
-            {
-                "d": 2,
-                "s": -1,
-                "x": 5,
-                "y": 3
-            },
-            ...,
-            {
-                "d": 2,
-                "s": -1,
-                "x": 6,
-                "y": 9
-            },
-        ]
-    },
-    "error": null
+```
+{
+  "data": {
+    "commands": [
+      "FW030",
+      "FR090",
+      "FW020",
+      "SNAP1_C",
+      "BL090",
+      "FW040",
+      "FL090",
+      "SNAP2_L",
+      "BR090",
+      "FW020",
+      "SNAP3_R",
+      "FIN"
+    ],
+    "path": [
+      [1, 1, 0],
+      [1, 4, 0],
+      [5, 4, 2],
+      [7, 4, 2],
+      [7, 8, 0],
+      [7, 12, 0],
+      [11, 12, 6],
+      [11, 15, 6],
+      [8, 15, 4]
+    ]
+  }
 }
 ```
-* [Raspberry Pi](https://github.com/pyesonekyaw/CZ3004-SC2079-MDP-RaspberryPi)
-* [Image Recognition](https://github.com/pyesonekyaw/CZ3004-SC2079-MDP-ImageRecognition)
