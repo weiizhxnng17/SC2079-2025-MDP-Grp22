@@ -1,23 +1,10 @@
 <br />
 <p align="center">
-  <img src="/images/Map.png" alt="Logo" height=150 >
   <h1 align="center">
     CZ3004/SC2079 Multidisciplinary Project - Algorithm API
   </h1>
 </p>
 
-# Overview
-2024 August Update: Someone sent me the slides from the briefing of this semester, this repository, along with my other MDP-related ones, are entirely STILL reusable as far as I can see. SCSE can become CCDS but MDP is still MDP. As usual, retrain the YOLO model (or use something more recent la). Once again, that is a 1-day thing. If you are using these repositories and you don't have a functioning, fully-integrated system by end of Week 4, reconsider your life choices and your peer evaluations.
-
-**2023 Semester 1 Update**: At least from what my juniors told me, this repository, along with my other MDP-related ones, are entirely reusuable. The only exception is that you will need to retrain the YOLO model since the fonts/colors were changed. That is a 1-day thing. If you are using these repositories and you don't have a functioning, fully-integrated system by end of Week 4, reconsider your life choices.
-
-Y'all, if you are using this code, which apparently a LOT of y'all are, at least star this repo leh
-
-This repository contains the code for the algorithm and image recognition inference component of the CZ3004/SC2079 Multidisciplinary Project. The repository is responsible for the following:
-
-- Finding the shortest path from starting point to all the obstacles
-- Performing inference on the images captured by the robot to identify the symbols
-- Stitching the images together to form a summary of the results
 
 ## Setup
 
@@ -33,11 +20,6 @@ python main.py
 
 The server will be running at `localhost:5000`
 
-### Misc
-
-- Raw images from Raspberry Pi are stored in the `uploads` folder.
-- After calling the `image/` endpoint, the annotated image (with bounding box and label) is stored in the `runs` and `own_results` folder.
-- After calling the `stitch/` endpoint, two stitched images using two different functions (for redundancy) are saved at `runs/stitched.jpg` and in the `own_results` folder.
 
 ### Primers - Constants and Parameters 
 
@@ -128,54 +110,5 @@ Sample JSON response:
     "error": null
 }
 ```
-
-##### 2. POST Request to /image
-
-The image is sent to the API as a file, thus no `base64` encoding required.
-
-**Sample Request in Python**
-
-```python3
-response = requests.post(url, files={"file": (filename, image_data)})
-```
-
-- `image_data`: a `bytes` object
-
-The API will then perform three operations:
-
-1. Save the received file into the `/uploads` and `/own_results` folders.
-2. Use the model to identify the image, save the results into the folders above.
-3. Return the class name as a `json` response.
-
-**Sample json response**
-
-```json
-{
-  "image_id": "D",
-  "obstacle_id": 1
-}
-```
-
-Please note that the inference pipeline is different for Task 1 and Task 2, be sure to comment/uncomment the appropriate lines in `app.py` before running the API.
-
-##### 3. POST Request to /stitch
-
-This will trigger the `stitch_image` and `stitch_image_own` functions.
-
-- Images found in the `run/` and `own_results` directory will be stitched together and saved separately, producing two stitched images. We have two functions for redundancy purposes. In case one fails, the other can still run.
-
-# Disclaimer
-
-I am not responsible for any errors, mishaps, or damages that may occur from using this code. Use at your own risk. This code is provided as-is, with no warranty of any kind. 
-
-# Acknowledgements
-
-I used Group 28's algorithm as a baseline, but improved it significantly. Edge cases that were previously not covered/handled are now handled.
-- [Group 28](https://github.com/CZ3004-Group-28)
-
-# Related Repositories
-
-* [Website](https://github.com/pyesonekyaw/MDP-Showcase)
-* [Simulator](https://github.com/pyesonekyaw/CZ3004-SC2079-MDP-Simulator)
 * [Raspberry Pi](https://github.com/pyesonekyaw/CZ3004-SC2079-MDP-RaspberryPi)
 * [Image Recognition](https://github.com/pyesonekyaw/CZ3004-SC2079-MDP-ImageRecognition)
