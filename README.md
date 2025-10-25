@@ -1,6 +1,5 @@
 # SC2079-2025-MDP-Grp22
 
-# SC2079-2025-MDP-Grp22
 
 This repository contains the **complete source code for the Final Submission** of the **SC2079: Multidisciplinary Design Project (MDP)** for Academic Year 2025.
 
@@ -33,9 +32,3 @@ These served as useful references for architecture design, communication protoco
 
 ---
 
-## ⚙️ Setup & Usage
-
-Clone the repository:
-```bash
-git clone https://github.com/weiizhxnng17/SC2079-2025-MDP-Grp22.git
-cd SC2079-2025-MDP-Grp22
