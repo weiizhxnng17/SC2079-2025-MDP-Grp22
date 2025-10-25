@@ -1,7 +1,7 @@
 # SC2079-2025-MDP-Grp22
 
 
-This repository contains the **complete source code for the Final Submission** of the **SC2079: Multidisciplinary Design Project (MDP)** for Academic Year 2025.
+This repository contains the **complete source code for the Final Submission** of the **SC2079: Multidisciplinary Design Project (MDP)** for Academic Year 2025-2026 Semester 1.
 
 ---
 
